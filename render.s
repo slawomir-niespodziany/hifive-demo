@@ -50,5 +50,7 @@ leave_as_black:
     mv t0, zero
     addi t1, t1, 1
     blt t1, a1, loop
+    
+    li a0, 123
 
     ret

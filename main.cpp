@@ -6,14 +6,11 @@
 typedef __int128 int128_t;
 using namespace std::string_literals;
 
-// A. Uncomment this to run assembly code.
-/*
-extern "C" unsigned render(unsigned int W, unsigned int H, uint8_t *pBuffer, int64_t mid_x, int64_t mid_y, int64_t span, uint32_t color);
-*/
+// A. Declaration for assembly code.
+extern "C" uint64_t render(unsigned int W, unsigned int H, uint8_t *pBuffer, int64_t mid_x, int64_t mid_y, int64_t span, uint32_t color);
 
-// B. Uncomment this to run demo with zooming functionality.
-
-void render(int64_t W, int64_t H, uint8_t *pBuffer, int64_t mid_x, int64_t mid_y, int64_t span, uint32_t color) {
+// B. Definition for demo with zooming functionality.
+uint64_t render_cpp(int64_t W, int64_t H, uint8_t *pBuffer, int64_t mid_x, int64_t mid_y, int64_t span, uint32_t color) {
     for (int row = 0; row < H; row++) {
         for (int col = 0; col < W; col++) {
             uint8_t *p = pBuffer + 3 * (row * W + col);
@@ -32,8 +29,14 @@ void render(int64_t W, int64_t H, uint8_t *pBuffer, int64_t mid_x, int64_t mid_y
             }
         }
     }
+    
+    return 0u;
 }
 
+// Select A vs. B here.
+
+ #define RENDER render
+//#define RENDER render_cpp
 
 // Image size.
 int64_t g_w{512}, g_h{512};
@@ -44,17 +47,21 @@ int64_t g_y = 0; // -||-
 
 // Horizontal span of the currently displayed area.
 constexpr int64_t SPAN_MAX = 0x4000000000000000l; // 8.0 in Q5.59, range [-16, 16)
-constexpr int64_t SPAN_MIN = 0x0000000000000001l; // -||-
+constexpr int64_t SPAN_MIN = 0x0000000000000001l; // +delta in Q5.59, range [-16, 16)
 int64_t g_span = SPAN_MAX;
 
 // Custom param.
-uint32_t g_color = 0xFF0000u /* red */ /* | 0x00FF00u */ /* green */ | 0x0000FFu /* blue */;
+uint32_t g_color = 0
+	      // | 0xFF0000u /* red */
+		 | 0x00FF00u /* green */ 
+		 | 0x0000FFu /* blue */
+		 ;
 
 // Zoom in / zoom out functionality.
 void update(int event, int x, int y, int flags, void *pUser) {
     if (cv::EVENT_MOUSEWHEEL == event) {
         int64_t span = g_span;
-        if (0 < flags) {
+        if (0 > flags) {
             span >>= (SPAN_MIN < span)?(1):(0);
         } else {
             span <<= (SPAN_MAX > span)?(1):(0);
@@ -74,9 +81,9 @@ void update(int event, int x, int y, int flags, void *pUser) {
         }
         g_span = span;
         
-        cv::Mat *pMat = static_cast<cv::Mat*>(pUser);
-        render(g_w, g_h, static_cast<uint8_t*>(pMat->ptr()), g_x, g_y, g_span, g_color);
-        cv::imshow("Demo", *pMat);
+        cv::Mat &mat = *static_cast<cv::Mat*>(pUser);
+        RENDER(g_w, g_h, static_cast<uint8_t*>(mat.ptr()), g_x, g_y, g_span, g_color);
+        cv::imshow("Demo", mat);
     }
 }
 
@@ -90,9 +97,8 @@ void update(int event, int x, int y, int flags, void *pUser) {
  * "./demo "" 100 200"          - runs in interactive mode, width is 100, height is 200,
  */
 int main(int argc, char *argv[]) {
+    // Path
     std::string path{"out.png"s};
-
-    // Width
     if (2 <= argc) {
         path = argv[1];
     }
@@ -132,21 +138,21 @@ int main(int argc, char *argv[]) {
     if (path.empty()) {
         std::cout << "Interactive mode ("s << g_w << "x"s << g_h << ")."s << std::endl;
         
-        render(g_w, g_h, static_cast<uint8_t*>(mat.ptr()), g_x, g_y, g_span, g_color);
+        RENDER(g_w, g_h, static_cast<uint8_t*>(mat.ptr()), g_x, g_y, g_span, g_color);
         
-        cv::namedWindow("Demo", cv::WINDOW_OPENGL);
+        cv::namedWindow("Demo", cv::WINDOW_NORMAL);
         cv::resizeWindow("Demo", g_w, g_h);
         cv::setMouseCallback("Demo", &update, static_cast<void*>(&mat));
         cv::imshow("Demo", mat);
         
-        while(cv::getWindowProperty("Demo", cv::WND_PROP_VISIBLE) && (27 != cv::waitKey(10))) {
+        while((0 == cv::getWindowProperty("Demo", cv::WND_PROP_AUTOSIZE)) && (27 != cv::waitKey(10))) {
             // empty
         }
 
     } else {
         std::cout << "Batch mode (\""s << path << "\", "s << g_w << "x"s << g_h << ")."s << std::endl;
         
-        render(g_w, g_h, static_cast<uint8_t*>(mat.ptr()), g_x, g_y, g_span, g_color);
+	RENDER(g_w, g_h, static_cast<uint8_t*>(mat.ptr()), g_x, g_y, g_span, g_color);
         cv::imwrite(path, mat);
     }
     
